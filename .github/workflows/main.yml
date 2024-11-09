@@ -58,7 +58,7 @@ jobs:
       - name: Update ECS Task Definition with new image
         id: task-def
         run: |
-          # Fetch the current task definition and filter out the unnecessary fields
+          # Fetch the current task definition and filter out unnecessary fields
           aws ecs describe-task-definition --task-definition MyTask --query 'taskDefinition' > task-def.json
           
           # Update the image URI in task definition JSON
@@ -67,9 +67,11 @@ jobs:
               task-def.json > new-task-def.json
 
           # Register a new revision of the task definition
-          aws ecs register-task-definition --cli-input-json file://new-task-def.json
-
-      # Step 10: Deploy updated service on ECS
+          new_task_definition=$(aws ecs register-task-definition --cli-input-json file://new-task-def.json --query 'taskDefinition.taskDefinitionArn' --output text)
+          echo "new_task_definition=$new_task_definition" >> $GITHUB_ENV
+          
+      # Step 10: Deploy updated service on ECS with the new task definition revision
       - name: Deploy updated service on ECS
         run: |
-          aws ecs update-service --cluster MyCluster --service test-dev-1 --force-new-deployment
+          # Update the ECS service to use the latest revision
+          aws ecs update-service --cluster MyCluster --service test-dev-1 --task-definition ${{ env.new_task_definition }} --force-new-deployment
