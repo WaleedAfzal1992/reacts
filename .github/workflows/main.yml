@@ -58,11 +58,13 @@ jobs:
       - name: Update ECS Task Definition with new image
         id: task-def
         run: |
-          # Fetch the current task definition
-          aws ecs describe-task-definition --task-definition MyTask --query taskDefinition > task-def.json
+          # Fetch the current task definition and filter out the unnecessary fields
+          aws ecs describe-task-definition --task-definition MyTask --query 'taskDefinition' > task-def.json
           
           # Update the image URI in task definition JSON
-          jq '.containerDefinitions[0].image = "061051224547.dkr.ecr.us-east-1.amazonaws.com/my-react-web:latest"' task-def.json > new-task-def.json
+          jq '.containerDefinitions[0].image = "061051224547.dkr.ecr.us-east-1.amazonaws.com/my-react-web:latest" |
+              del(.revision, .taskDefinitionArn, .status, .requiresAttributes, .compatibilities, .registeredAt, .registeredBy)' \
+              task-def.json > new-task-def.json
 
           # Register a new revision of the task definition
           aws ecs register-task-definition --cli-input-json file://new-task-def.json
