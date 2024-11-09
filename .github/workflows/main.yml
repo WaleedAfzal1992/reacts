@@ -1,0 +1,73 @@
+name: Deploy React App to AWS ECR and ECS
+
+on:
+  push:
+    branches:
+      - main  # Trigger deployment on push to the main branch
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest  # Use the latest Ubuntu environment
+
+    steps:
+      # Step 1: Checkout the repository
+      - name: Checkout Repository
+        uses: actions/checkout@v2
+
+      # Step 2: Set up Node.js
+      - name: Set up Node.js
+        uses: actions/setup-node@v2
+        with:
+          node-version: '16'  # Set the Node.js version
+
+      # Step 3: Install dependencies and build the React app
+      - name: Install Dependencies and Build
+        run: |
+          npm install
+          npm run build  # Generate the build
+
+      # Step 4: Set up AWS CLI
+      - name: Set up AWS CLI
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-1
+
+      # Step 5: Build Docker image
+      - name: Build Docker Image
+        run: |
+          docker build -t my-react-web .  # Build the Docker image
+
+      # Step 6: Log in to AWS ECR
+      - name: Login to AWS ECR
+        run: |
+          aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin 061051224547.dkr.ecr.us-east-1.amazonaws.com
+
+      # Step 7: Tag Docker Image
+      - name: Tag Docker Image
+        run: |
+          docker tag my-react-web:latest 061051224547.dkr.ecr.us-east-1.amazonaws.com/my-react-web:latest
+
+      # Step 8: Push Docker Image to ECR
+      - name: Push Docker Image to ECR
+        run: |
+          docker push 061051224547.dkr.ecr.us-east-1.amazonaws.com/my-react-web:latest
+
+      # Step 9: Update ECS Task Definition with the new image
+      - name: Update ECS Task Definition with new image
+        id: task-def
+        run: |
+          # Fetch the current task definition
+          aws ecs describe-task-definition --task-definition MyTask --query taskDefinition > task-def.json
+          
+          # Update the image URI in task definition JSON
+          jq '.containerDefinitions[0].image = "061051224547.dkr.ecr.us-east-1.amazonaws.com/my-react-web:latest"' task-def.json > new-task-def.json
+
+          # Register a new revision of the task definition
+          aws ecs register-task-definition --cli-input-json file://new-task-def.json
+
+      # Step 10: Deploy updated service on ECS
+      - name: Deploy updated service on ECS
+        run: |
+          aws ecs update-service --cluster MyCluster --service test-dev-1 --force-new-deployment
